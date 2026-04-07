@@ -46,6 +46,13 @@ let sprayTimer = null;
 const undoStack = [];
 const redoStack = [];
 
+let exploding = false;
+let explosionRaf = null;
+let explosionStartMs = 0;
+let explosionDurationMs = 850;
+let explosionParticles = [];
+let explodeTimeout = null;
+
 function isTypingInField() {
   const el = document.activeElement;
   if (!el) return false;
@@ -80,6 +87,149 @@ function snapshotCanvas() {
   return snap;
 }
 
+function cancelExplosion() {
+  exploding = false;
+  explosionParticles = [];
+  if (explosionRaf) cancelAnimationFrame(explosionRaf);
+  explosionRaf = null;
+}
+
+function cancelScheduledExplosion() {
+  if (explodeTimeout) window.clearTimeout(explodeTimeout);
+  explodeTimeout = null;
+}
+
+function scheduleExplosion() {
+  cancelScheduledExplosion();
+  explodeTimeout = window.setTimeout(() => {
+    explodeTimeout = null;
+    startExplosionThenDisappear();
+  }, 750);
+}
+
+function buildExplosionParticlesFromSnapshot(snap) {
+  const sctx = snap.getContext("2d");
+  const { width, height } = snap;
+  const img = sctx.getImageData(0, 0, width, height);
+  const data = img.data;
+
+  const maxParticles = 1400;
+  const particles = [];
+  const tries = maxParticles * 14;
+
+  for (let i = 0; i < tries && particles.length < maxParticles; i++) {
+    const x = (Math.random() * width) | 0;
+    const y = (Math.random() * height) | 0;
+    const idx = (y * width + x) * 4;
+    const a = data[idx + 3];
+    if (a < 22) continue;
+
+    const r = data[idx + 0];
+    const g = data[idx + 1];
+    const b = data[idx + 2];
+
+    const cx = x / dpr;
+    const cy = y / dpr;
+
+    const angle = Math.random() * Math.PI * 2;
+    const speed = 80 + Math.random() * 520;
+    particles.push({
+      x: cx,
+      y: cy,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed,
+      life: 1,
+      size: 0.8 + Math.random() * 2.8,
+      color: `rgba(${r}, ${g}, ${b}, ${a / 255})`,
+    });
+  }
+
+  return particles;
+}
+
+function startExplosionThenDisappear() {
+  if (exploding) return;
+  cancelScheduledExplosion();
+
+  const snap = snapshotCanvas();
+  const particles = buildExplosionParticlesFromSnapshot(snap);
+
+  // Even if the drawing is tiny, we still clear (disappear).
+  clearCanvas();
+  baseSnapshot = null;
+  stopSpray();
+
+  // Reset history: the drawing is meant to disappear.
+  undoStack.length = 0;
+  redoStack.length = 0;
+  syncActionButtons();
+
+  if (particles.length === 0) {
+    updateHud("Poof!");
+    window.setTimeout(() => updateHud("Ready"), 280);
+    return;
+  }
+
+  exploding = true;
+  explosionStartMs = performance.now();
+  explosionDurationMs = 850;
+  explosionParticles = particles;
+  updateHud("BOOM!");
+
+  let lastMs = explosionStartMs;
+  const drag = 0.985;
+  const gravity = 260;
+
+  function frame(nowMs) {
+    if (!exploding) return;
+    const t = (nowMs - explosionStartMs) / explosionDurationMs;
+    const done = t >= 1;
+
+    const dt = Math.min(0.033, Math.max(0.001, (nowMs - lastMs) / 1000));
+    lastMs = nowMs;
+
+    ctx.save();
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.globalCompositeOperation = "source-over";
+    ctx.globalAlpha = 1;
+    ctx.clearRect(0, 0, canvas.width / dpr, canvas.height / dpr);
+
+    // Slight glow/afterimage
+    ctx.fillStyle = "rgba(255,255,255,0.02)";
+    ctx.fillRect(0, 0, canvas.width / dpr, canvas.height / dpr);
+
+    for (const p of explosionParticles) {
+      p.vx *= Math.pow(drag, 60 * dt);
+      p.vy = p.vy * Math.pow(drag, 60 * dt) + gravity * dt;
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      p.life = 1 - t;
+
+      const a = clamp(p.life, 0, 1);
+      if (a <= 0) continue;
+
+      ctx.globalAlpha = a;
+      ctx.fillStyle = p.color;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    ctx.restore();
+
+    if (done) {
+      cancelExplosion();
+      clearCanvas();
+      updateHud("Ready");
+      return;
+    }
+
+    explosionRaf = requestAnimationFrame(frame);
+  }
+
+  explosionRaf = requestAnimationFrame(frame);
+}
+
 function drawSnapshot(snap) {
   ctx.save();
   ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -98,6 +248,7 @@ function pushUndo() {
 
 function undo() {
   if (undoStack.length === 0) return;
+  cancelScheduledExplosion();
   redoStack.push(snapshotCanvas());
   const snap = undoStack.pop();
   clearCanvas();
@@ -107,6 +258,7 @@ function undo() {
 
 function redo() {
   if (redoStack.length === 0) return;
+  cancelScheduledExplosion();
   undoStack.push(snapshotCanvas());
   const snap = redoStack.pop();
   clearCanvas();
@@ -361,7 +513,9 @@ function downloadPng() {
 
 function onPointerDown(ev) {
   if (pointerId !== null) return;
+  if (exploding) return;
   if (ev.button !== undefined && ev.button !== 0) return;
+  cancelScheduledExplosion();
 
   pointerId = ev.pointerId;
   canvas.setPointerCapture(pointerId);
@@ -452,6 +606,9 @@ function finishStroke(ev) {
   startPoint = null;
   baseSnapshot = null;
   updateHud();
+
+  // Explode after a short pause (lets you draw multiple strokes quickly).
+  scheduleExplosion();
 }
 
 function cancelStroke() {
@@ -495,6 +652,8 @@ redoBtn.addEventListener("click", redo);
 saveBtn.addEventListener("click", downloadPng);
 clearBtn.addEventListener("click", () => {
   if (!confirm("Clear the canvas?")) return;
+  cancelExplosion();
+  cancelScheduledExplosion();
   pushUndo();
   clearCanvas();
   updateHud("Cleared");
@@ -596,6 +755,8 @@ window.addEventListener("keydown", (ev) => {
 
   if (key === "x") {
     if (!confirm("Clear the canvas?")) return;
+    cancelExplosion();
+    cancelScheduledExplosion();
     pushUndo();
     clearCanvas();
     updateHud("Cleared");
