@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+
+<html lang="en">    
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Keyboard Sketch</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+    <body>
+        <header class="topbar">
+            <div class="brand">
+                <div class="logo" aria-hidden="true"></div>
+                <div>
+                    <div class="title">Keyboard Sketch</div>
+                    <div class="subtitle">Draw on the canvas. Use your keyboard to switch styles.</div>
+                </div>
+            </div>
+
+            <div class="controls" aria-label="Drawing controls">
+                <label class="field">
+                    <span class="label">Tool</span>
+                    <select id="toolSelect" class="input">
+                        <option value="pen">Pen (1)</option>
+                        <option value="line">Line (2)</option>
+                        <option value="rect">Rectangle (3)</option>
+                        <option value="circle">Circle (4)</option>
+                        <option value="spray">Spray (5)</option>
+                        <option value="eraser">Eraser (E)</option>
+                    </select>
+                </label>
+
+                <label class="field">
+                    <span class="label">Color</span>
+                    <input id="colorInput" class="input" type="color" value="#1f2937">
+                </label>
+
+                <label class="field">
+                    <span class="label">Size</span>
+                    <input id="sizeInput" class="input" type="range" min="1" max="80" value="10">
+                </label>
+
+                <label class="field">
+                    <span class="label">Opacity</span>
+                    <input id="opacityInput" class="input" type="range" min="0.05" max="1" step="0.05" value="1">
+                </label>
+
+                <div class="toggles" role="group" aria-label="Toggles">
+                    <button id="mirrorBtn" class="btn" type="button" aria-pressed="false" title="Mirror mode (M)">Mirror (M)</button>
+                    <button id="rainbowBtn" class="btn" type="button" aria-pressed="false" title="Rainbow (R)">Rainbow (R)</button>
+                    <button id="fillBtn" class="btn" type="button" aria-pressed="false" title="Fill shapes (F)">Fill (F)</button>
+                    <button id="gridBtn" class="btn" type="button" aria-pressed="false" title="Grid (G)">Grid (G)</button>
+                    <button id="helpBtn" class="btn" type="button" aria-pressed="true" title="Help (H)">Help (H)</button>
+                </div>
+
+                <div class="actions">
+                    <button id="undoBtn" class="btn btn-secondary" type="button" title="Undo (U)">Undo (U)</button>
+                    <button id="redoBtn" class="btn btn-secondary" type="button" title="Redo (Y)">Redo (Y)</button>
+                    <button id="saveBtn" class="btn btn-secondary" type="button" title="Save PNG (S)">Save (S)</button>
+                    <button id="clearBtn" class="btn btn-danger" type="button" title="Clear (X)">Clear (X)</button>
+                </div>
+            </div>
+        </header>
+
+        <main class="stage">
+            <section id="canvasShell" class="canvas-shell grid-on" aria-label="Canvas area">
+                <canvas id="canvas" class="canvas" aria-label="Drawing canvas"></canvas>
+                <div id="hud" class="hud" aria-live="polite"></div>
+            </section>
+
+            <aside id="helpPanel" class="help" aria-label="Keyboard shortcuts">
+                <div class="help-card">
+                    <div class="help-title">Keyboard shortcuts</div>
+                    <div class="help-grid">
+                        <div class="help-item"><kbd>1</kbd> Pen</div>
+                        <div class="help-item"><kbd>2</kbd> Line</div>
+                        <div class="help-item"><kbd>3</kbd> Rectangle</div>
+                        <div class="help-item"><kbd>4</kbd> Circle</div>
+                        <div class="help-item"><kbd>5</kbd> Spray</div>
+                        <div class="help-item"><kbd>E</kbd> Eraser</div>
+                        <div class="help-item"><kbd>[</kbd>/<kbd>]</kbd> Size −/+</div>
+                        <div class="help-item"><kbd>U</kbd> Undo</div>
+                        <div class="help-item"><kbd>Y</kbd> Redo</div>
+                        <div class="help-item"><kbd>M</kbd> Mirror</div>
+                        <div class="help-item"><kbd>R</kbd> Rainbow</div>
+                        <div class="help-item"><kbd>F</kbd> Fill shapes</div>
+                        <div class="help-item"><kbd>G</kbd> Grid</div>
+                        <div class="help-item"><kbd>S</kbd> Save PNG</div>
+                        <div class="help-item"><kbd>X</kbd> Clear</div>
+                        <div class="help-item"><kbd>H</kbd> Toggle help</div>
+                        <div class="help-item"><kbd>Shift</kbd> Constrain shapes</div>
+                    </div>
+                    <div class="help-note">
+                        Tip: try <kbd>R</kbd> (rainbow) + <kbd>M</kbd> (mirror) + a big brush.
+                    </div>
+                </div>
+            </aside>
+        </main>
+
+        <script src="script.js" defer></script>
+    </body>
+</html>
+ 
