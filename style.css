@@ -212,6 +212,35 @@ select.input{
     max-width: 70%;
 }
 
+.roast{
+    position: absolute;
+    left: 12px;
+    top: 12px;
+    padding: 10px 12px;
+    border-radius: 14px;
+    border: 1px solid var(--border);
+    background: rgba(0, 0, 0, 0.42);
+    color: rgba(255,255,255,0.92);
+    font-size: 14px;
+    line-height: 1.35;
+    backdrop-filter: blur(10px);
+    box-shadow: 0 14px 30px rgba(0,0,0,0.28);
+    max-width: min(520px, 78%);
+}
+
+.roast.loading{
+    color: rgba(255,255,255,0.8);
+}
+
+.roast.error{
+    border-color: rgba(239, 68, 68, 0.48);
+    background: rgba(239, 68, 68, 0.14);
+}
+
+.roast.hidden{
+    display: none;
+}
+
 .help{
     position: relative;
 }

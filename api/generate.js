@@ -1,0 +1,91 @@
+module.exports = async function handler(req, res) {
+  try {
+    if (req.method !== "POST") {
+      res.statusCode = 405;
+      res.setHeader("Allow", "POST");
+      res.setHeader("Content-Type", "application/json");
+      res.end(JSON.stringify({ error: "Method not allowed" }));
+      return;
+    }
+
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      res.statusCode = 500;
+      res.setHeader("Content-Type", "application/json");
+      res.end(JSON.stringify({ error: "Missing GEMINI_API_KEY" }));
+      return;
+    }
+
+    const readJsonBody = async () => {
+      if (req.body && typeof req.body === "object") return req.body;
+      if (typeof req.body === "string") return JSON.parse(req.body);
+
+      const chunks = [];
+      for await (const chunk of req) chunks.push(Buffer.from(chunk));
+      const raw = Buffer.concat(chunks).toString("utf8").trim();
+      if (!raw) return {};
+      return JSON.parse(raw);
+    };
+
+    const body = await readJsonBody();
+    const image = typeof body.image === "string" ? body.image : "";
+    const match = image.match(/^data:([^;]+);base64,(.+)$/);
+    if (!match) {
+      res.statusCode = 400;
+      res.setHeader("Content-Type", "application/json");
+      res.end(JSON.stringify({ error: "Body must include { image: dataUrl }" }));
+      return;
+    }
+
+    const mimeType = match[1];
+    const data = match[2];
+
+    const model = process.env.GEMINI_MODEL || "gemini-2.0-flash";
+    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
+      model
+    )}:generateContent?key=${encodeURIComponent(apiKey)}`;
+
+    const prompt =
+      "Roast this drawing in ONE short, playful sentence. Keep it PG-13. No slurs, no hate, no protected-class insults, no sexual content. Just a silly, generic art critique.";
+
+    const geminiRes = await fetch(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [
+          {
+            role: "user",
+            parts: [
+              { text: prompt },
+              { inline_data: { mime_type: mimeType, data } },
+            ],
+          },
+        ],
+        generationConfig: {
+          temperature: 1.0,
+          maxOutputTokens: 60,
+        },
+      }),
+    });
+
+    const geminiJson = await geminiRes.json().catch(() => null);
+
+    if (!geminiRes.ok) {
+      res.statusCode = 502;
+      res.setHeader("Content-Type", "application/json");
+      res.end(JSON.stringify({ error: "Gemini API error", details: geminiJson || null }));
+      return;
+    }
+
+    const roast =
+      geminiJson?.candidates?.[0]?.content?.parts?.map((p) => p?.text).filter(Boolean).join("").trim() || "";
+
+    res.statusCode = 200;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ roast: roast || "That drawing has the confidence of a masterpiece and the execution of a sneeze." }));
+  } catch (err) {
+    res.statusCode = 500;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ error: "Server error", message: String(err?.message || err) }));
+  }
+};

@@ -20,6 +20,7 @@ const clearBtn = document.getElementById("clearBtn");
 const canvasShell = document.getElementById("canvasShell");
 const helpPanel = document.getElementById("helpPanel");
 const hud = document.getElementById("hud");
+const roastEl = document.getElementById("roast");
 
 const MAX_HISTORY = 30;
 const state = {
@@ -52,6 +53,8 @@ let explosionStartMs = 0;
 let explosionDurationMs = 850;
 let explosionParticles = [];
 let explodeTimeout = null;
+
+let roastAbortController = null;
 
 function isTypingInField() {
   const el = document.activeElement;
@@ -97,6 +100,75 @@ function cancelExplosion() {
 function cancelScheduledExplosion() {
   if (explodeTimeout) window.clearTimeout(explodeTimeout);
   explodeTimeout = null;
+}
+
+function setRoastVisible(on) {
+  if (!roastEl) return;
+  roastEl.classList.toggle("hidden", !on);
+}
+
+function setRoastState({ text = "", stateClass = "" } = {}) {
+  if (!roastEl) return;
+  roastEl.classList.remove("loading", "error");
+  if (stateClass) roastEl.classList.add(stateClass);
+  roastEl.textContent = text;
+  setRoastVisible(Boolean(text));
+}
+
+function cancelRoastRequest() {
+  if (roastAbortController) roastAbortController.abort();
+  roastAbortController = null;
+}
+
+function dataUrlToInlineData(dataUrl) {
+  if (typeof dataUrl !== "string") return null;
+  const match = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
+  if (!match) return null;
+  return { mimeType: match[1], data: match[2] };
+}
+
+function snapshotToJpegDataUrl(snap, { maxSide = 512, quality = 0.78 } = {}) {
+  const srcW = snap.width;
+  const srcH = snap.height;
+  const longest = Math.max(srcW, srcH);
+  const scale = longest > maxSide ? maxSide / longest : 1;
+
+  const dstW = Math.max(1, Math.round(srcW * scale));
+  const dstH = Math.max(1, Math.round(srcH * scale));
+
+  const out = document.createElement("canvas");
+  out.width = dstW;
+  out.height = dstH;
+  const octx = out.getContext("2d");
+  octx.drawImage(snap, 0, 0, dstW, dstH);
+
+  // JPEG is much smaller than PNG for sketches.
+  return out.toDataURL("image/jpeg", quality);
+}
+
+async function requestRoastFromDataUrl(dataUrl) {
+  const inline = dataUrlToInlineData(dataUrl);
+  if (!inline) throw new Error("Could not encode image");
+
+  cancelRoastRequest();
+  roastAbortController = new AbortController();
+
+  const res = await fetch("/api/generate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    signal: roastAbortController.signal,
+    body: JSON.stringify({ image: `data:${inline.mimeType};base64,${inline.data}` }),
+  });
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`API error (${res.status}) ${text}`.trim());
+  }
+
+  const json = await res.json();
+  const roast = typeof json?.roast === "string" ? json.roast.trim() : "";
+  if (!roast) throw new Error("Empty response");
+  return roast;
 }
 
 function scheduleExplosion() {
@@ -153,6 +225,7 @@ function startExplosionThenDisappear() {
 
   const snap = snapshotCanvas();
   const particles = buildExplosionParticlesFromSnapshot(snap);
+  const roastDataUrl = snapshotToJpegDataUrl(snap);
 
   // Even if the drawing is tiny, we still clear (disappear).
   clearCanvas();
@@ -166,6 +239,7 @@ function startExplosionThenDisappear() {
 
   if (particles.length === 0) {
     updateHud("Poof!");
+    setRoastState({ text: "", stateClass: "" });
     window.setTimeout(() => updateHud("Ready"), 280);
     return;
   }
@@ -175,6 +249,14 @@ function startExplosionThenDisappear() {
   explosionDurationMs = 850;
   explosionParticles = particles;
   updateHud("BOOM!");
+
+  setRoastState({ text: "Judging your art…", stateClass: "loading" });
+  requestRoastFromDataUrl(roastDataUrl)
+    .then((roast) => setRoastState({ text: roast, stateClass: "" }))
+    .catch((err) => {
+      if (String(err?.name) === "AbortError") return;
+      setRoastState({ text: "Couldn’t generate a roast (check GEMINI_API_KEY).", stateClass: "error" });
+    });
 
   let lastMs = explosionStartMs;
   const drag = 0.985;
@@ -516,6 +598,8 @@ function onPointerDown(ev) {
   if (exploding) return;
   if (ev.button !== undefined && ev.button !== 0) return;
   cancelScheduledExplosion();
+  cancelRoastRequest();
+  setRoastState({ text: "", stateClass: "" });
 
   pointerId = ev.pointerId;
   canvas.setPointerCapture(pointerId);
