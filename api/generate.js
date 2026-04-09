@@ -10,7 +10,14 @@ module.exports = async function handler(req, res) {
 
     const model = process.env.GEMINI_MODEL || "gemini-2.5-flash";
 
-    if (req.method === "GET") {
+    if (req.method === "OPTIONS") {
+      res.statusCode = 204;
+      res.setHeader("Allow", "GET, HEAD, POST, OPTIONS");
+      res.end();
+      return;
+    }
+
+    if (req.method === "GET" || req.method === "HEAD") {
       res.statusCode = 200;
       res.setHeader("Content-Type", "application/json");
       res.end(JSON.stringify({ ok: true, model, hasKey: true }));
@@ -19,7 +26,7 @@ module.exports = async function handler(req, res) {
 
     if (req.method !== "POST") {
       res.statusCode = 405;
-      res.setHeader("Allow", "GET, POST");
+      res.setHeader("Allow", "GET, HEAD, POST, OPTIONS");
       res.setHeader("Content-Type", "application/json");
       res.end(JSON.stringify({ error: "Method not allowed" }));
       return;
