@@ -8,7 +8,7 @@ module.exports = async function handler(req, res) {
       return;
     }
 
-    const model = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+    const model = process.env.GEMINI_MODEL || "gemini-2.0-flash";
 
     if (req.method === "OPTIONS") {
       res.statusCode = 204;
@@ -70,7 +70,7 @@ module.exports = async function handler(req, res) {
             role: "user",
             parts: [
               { text: prompt },
-              { inline_data: { mime_type: mimeType, data } },
+              { inlineData: { mimeType, data } },
             ],
           },
         ],
