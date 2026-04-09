@@ -1,18 +1,27 @@
 module.exports = async function handler(req, res) {
   try {
-    if (req.method !== "POST") {
-      res.statusCode = 405;
-      res.setHeader("Allow", "POST");
-      res.setHeader("Content-Type", "application/json");
-      res.end(JSON.stringify({ error: "Method not allowed" }));
-      return;
-    }
-
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
       res.statusCode = 500;
       res.setHeader("Content-Type", "application/json");
       res.end(JSON.stringify({ error: "Missing GEMINI_API_KEY" }));
+      return;
+    }
+
+    const model = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+
+    if (req.method === "GET") {
+      res.statusCode = 200;
+      res.setHeader("Content-Type", "application/json");
+      res.end(JSON.stringify({ ok: true, model, hasKey: true }));
+      return;
+    }
+
+    if (req.method !== "POST") {
+      res.statusCode = 405;
+      res.setHeader("Allow", "GET, POST");
+      res.setHeader("Content-Type", "application/json");
+      res.end(JSON.stringify({ error: "Method not allowed" }));
       return;
     }
 
@@ -40,17 +49,14 @@ module.exports = async function handler(req, res) {
     const mimeType = match[1];
     const data = match[2];
 
-    const model = process.env.GEMINI_MODEL || "gemini-2.0-flash";
-    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
-      model
-    )}:generateContent?key=${encodeURIComponent(apiKey)}`;
+    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
 
     const prompt =
       "Roast this drawing in ONE short, playful sentence. Keep it PG-13. No slurs, no hate, no protected-class insults, no sexual content. Just a silly, generic art critique.";
 
     const geminiRes = await fetch(endpoint, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
       body: JSON.stringify({
         contents: [
           {
@@ -71,9 +77,27 @@ module.exports = async function handler(req, res) {
     const geminiJson = await geminiRes.json().catch(() => null);
 
     if (!geminiRes.ok) {
+      const apiMessage =
+        (typeof geminiJson?.error?.message === "string" && geminiJson.error.message) ||
+        (typeof geminiJson?.message === "string" && geminiJson.message) ||
+        "";
+      console.error("Gemini API error", {
+        status: geminiRes.status,
+        statusText: geminiRes.statusText,
+        message: apiMessage,
+        body: geminiJson,
+      });
+
       res.statusCode = 502;
       res.setHeader("Content-Type", "application/json");
-      res.end(JSON.stringify({ error: "Gemini API error", details: geminiJson || null }));
+      res.end(
+        JSON.stringify({
+          error: "Gemini API error",
+          message: apiMessage || `Upstream returned ${geminiRes.status}`,
+          status: geminiRes.status,
+          details: geminiJson || null,
+        })
+      );
       return;
     }
 
@@ -84,6 +108,7 @@ module.exports = async function handler(req, res) {
     res.setHeader("Content-Type", "application/json");
     res.end(JSON.stringify({ roast: roast || "That drawing has the confidence of a masterpiece and the execution of a sneeze." }));
   } catch (err) {
+    console.error("Server error", err);
     res.statusCode = 500;
     res.setHeader("Content-Type", "application/json");
     res.end(JSON.stringify({ error: "Server error", message: String(err?.message || err) }));

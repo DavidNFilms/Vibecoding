@@ -161,8 +161,21 @@ async function requestRoastFromDataUrl(dataUrl) {
   });
 
   if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`API error (${res.status}) ${text}`.trim());
+    let message = "";
+    const contentType = res.headers.get("content-type") || "";
+    if (contentType.includes("application/json")) {
+      const json = await res.json().catch(() => null);
+      message =
+        (typeof json?.error === "string" && json.error) ||
+        json?.error?.message ||
+        json?.message ||
+        JSON.stringify(json);
+    } else {
+      message = await res.text().catch(() => "");
+    }
+    message = String(message || "").trim();
+    if (message.length > 220) message = message.slice(0, 220) + "…";
+    throw new Error(`API ${res.status}${message ? `: ${message}` : ""}`);
   }
 
   const json = await res.json();
@@ -255,7 +268,13 @@ function startExplosionThenDisappear() {
     .then((roast) => setRoastState({ text: roast, stateClass: "" }))
     .catch((err) => {
       if (String(err?.name) === "AbortError") return;
-      setRoastState({ text: "Couldn’t generate a roast (check GEMINI_API_KEY).", stateClass: "error" });
+      const msg = String(err?.message || err || "").trim();
+      setRoastState({
+        text: msg
+          ? `Couldn’t generate a roast. ${msg}`
+          : "Couldn’t generate a roast (check GEMINI_API_KEY). Try opening /api/generate to verify the function.",
+        stateClass: "error",
+      });
     });
 
   let lastMs = explosionStartMs;
